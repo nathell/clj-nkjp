@@ -2,35 +2,14 @@
   (:require
    [clojure.edn :as edn]
    [clojure.java.io :as io]
-   [clojure.string :as string]))
+   [clojure.string :as string]
+   [clj-nkjp.tagset :as tagset]))
 
 (defn strip-orth [interp]
   (string/replace interp #"^.*?:" ""))
 
 (defn golden-tag [seg]
-  (let [interp (-> seg :disamb first :interpretation first)
-        once (strip-orth interp)]
-    (cond
-     (= interp "::interp") (strip-orth once)
-     (.startsWith interp "(:") (strip-orth once)
-     (.startsWith interp ":)") (strip-orth once)
-     (.startsWith interp ":(") (strip-orth once)
-     (.startsWith interp ":-") (strip-orth once)
-     (.startsWith interp ":o") (strip-orth once)
-     (.startsWith interp ":]") (strip-orth once)
-     (.startsWith interp ":P") (strip-orth once)
-     (.startsWith interp ":D") (strip-orth once)
-     (.startsWith interp ":|") (strip-orth once)
-     (.startsWith interp ":\\") (strip-orth once)
-     (.startsWith interp ":O") (strip-orth once)
-     (.startsWith once "//") (let [twice (strip-orth once)]
-                               (if (.startsWith twice "80")
-                                 (strip-orth twice)
-                                 twice))
-     (.startsWith interp "news:pl") (strip-orth once)
-     (.startsWith interp "news:9") (strip-orth once)
-     (.startsWith interp "E::") (strip-orth once)
-     :otherwise once)))
+  (->> seg :disamb first :interpretation first tagset/parse-tag tagset/serialize-tag))
 
 (defn segment-seq [x]
   (filter map? (tree-seq vector? next x)))
