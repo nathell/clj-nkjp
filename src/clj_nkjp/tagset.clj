@@ -61,7 +61,7 @@
   (let [categories (pos (:pos tag))
         allowed-categories (set (map keyword (flatten categories)))
         keyset (set (keys tag))]
-    (doseq [[k v] tag :when (and (not= k :pos) (not= k :orth))]
+    (doseq [[k v] tag :when (and (not= k :pos) (not= k :base))]
       (when-not (allowed-categories k)
         (throw (Exception. (format "%s doesn't inflect with %s: %s" (:pos tag) k tag)))))
     (doseq [cat categories :when (not (vector? cat))]
@@ -74,7 +74,7 @@
   ([tagset tag]
      (let [[orth [the-pos & tag-parts]] (split-when (:pos tagset) (string/split tag #":"))]
        (verify-tag tagset
-                   (into {:pos the-pos, :orth (string/join ":" orth)}
+                   (into {:pos the-pos, :base (string/join ":" orth)}
                          (for [part tag-parts :let [part-name (tagset part)]]
                            (if part-name
                              [(keyword part-name) part]
