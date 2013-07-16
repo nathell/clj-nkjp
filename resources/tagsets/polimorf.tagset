@@ -1,0 +1,46 @@
+[ATTR]
+
+accentability = akc nakc
+accommodability = congr rec
+aspect = imperf perf
+case = nom gen dat acc inst loc voc
+degree = pos com sup
+fullstoppedness = pun npun
+gender = m1 m2 m3 f n1 n2 p1 p2 p3
+ispred = pred
+negation = aff neg
+number = sg pl
+person = pri sec ter
+post-prepositionality = npraep praep
+reflexiveness = nonrefl refl
+verbkind = bedzie fin imps impt inf pot praet winien
+vocalicity = nwok wok
+
+[POS]
+
+adj = number case gender degree
+adjc =
+adjp =
+adv = [degree]
+brev = fullstoppedness
+burk =
+comp =
+conj =
+depr = number case gender
+ger = number case gender aspect negation [reflexiveness]
+ign =
+interj =
+# XXX: num:comp?!
+num = number case gender accommodability
+pact = number case gender aspect negation reflexiveness
+pant = aspect [reflexiveness]
+pcon = aspect reflexiveness
+ppas = number case gender aspect negation
+ppron12 = number case gender person [accentability]
+ppron3 = number case gender person [accentability] [post-prepositionality]
+pred =
+prep = case [vocalicity]
+qub =
+siebie = case [accentability]
+subst = number case gender
+verb = [ispred] verbkind [number] [gender] [person] [aspect] [reflexiveness]
