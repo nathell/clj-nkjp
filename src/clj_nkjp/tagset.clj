@@ -44,7 +44,7 @@
           {:keys [attr pos]} section-map]
       (compile-tagset (map parse-line attr) (map parse-line pos)))))
 
-(def nkjp (read-tagset "/home/nathell/corpora/nkjp/nkjp.tagset"))
+(def nkjp (read-tagset (io/resource "tagsets/nkjp.tagset")))
 
 (defn serialize-tag
   ([tag] (serialize-tag nkjp tag))

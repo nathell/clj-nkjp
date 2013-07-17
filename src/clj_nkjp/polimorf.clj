@@ -81,46 +81,38 @@
 (defn sentences [document]
   (filter #(= (first %) :s) (tree-seq vector? rest document)))
 
-(def ^:dynamic context "")
-
-(defn leave-as-is
-  ([x] x)
-  ([x warning & args]
-     (printf "Warning: In %s: %s\n" context (apply format warning args))
-     (flush)
-     x))
-
-(defn combine-subsegments [main aux]
+(defn combine-subsegments [main aux errors]
   (if (seq aux)
     (reduce
-     (fn [curr aux]
+     (fn [[curr errors] aux]
        (cond
-        (= (:pos aux) "aglt") (if (#{"praet" "pot"} (:pos curr))
-                                (assoc curr :person (:person aux))
-                                (leave-as-is curr "aglt %s not affixed to praet %s" aux main))
+        (= (:pos aux) "aglt") (if (#{"praet" "pot" "winien"} (:pos curr))
+                                [(assoc curr :person (:person aux)) errors]
+                                [curr (conj errors {:type :aglt, :aux aux, :main main, :partial curr})])
         (= (:orth aux) "by") (if (= (:pos curr) "praet")
-                               (assoc curr :pos "pot")
-                               (leave-as-is curr "-by %s not affixed to praet %s" aux main))
-        :otherwise (leave-as-is curr "Unsupported affix: %s" aux)))
-     (assoc main :orth (apply str (:orth main) (map :orth aux)))
+                               [(assoc curr :pos "pot") errors]
+                               [curr (conj errors {:type :pot, :aux aux, :main main, :partial curr})])
+        :otherwise [curr (conj errors {:type :unsupported, :aux aux, :main main, :partial curr})]))
+     [(assoc main :orth (apply str (:orth main) (map :orth aux))) errors]
      aux)
-    main))
+    [main errors]))
 
 (defn nkjp->t3 [segs]
   (when (seq segs)
     (lazy-seq
      (let [fst (first segs) rst (rest segs)]
        (if (= (:pos fst) "interp")
-         (cons fst (nkjp->t3 rst))
+         (cons [fst nil] (nkjp->t3 rst))
          (let [[aux nxt] (split-with #(and (:nps %) (not= (:pos %) "interp")) rst)]
-           (cons (combine-subsegments fst aux) (nkjp->t3 nxt))))))))
+           (cons (combine-subsegments fst aux []) (nkjp->t3 nxt))))))))
 
 (defn checker
   "Try running nkjp->t3 on all sentences in the corpus, to see
 how many unsupported cases we have."
   []
-  (doseq [f (rest (file-seq (io/file "/home/nathell/corpora/nkjp-clj/")))
-          :let [docum (read-string (slurp f))]
-          sent (sentences docum)] 
-    (binding [context (str f)]
-      (dorun (nkjp->t3 (sentence->segs sent))))))
+  (->>
+   (for [f (rest (file-seq (io/file "/home/nathell/corpora/nkjp-clj/")))
+         :let [docum (read-string (slurp f))]
+         sent (sentences docum)]
+     (apply concat (map second (nkjp->t3 (sentence->segs sent)))))
+   (apply concat)))
