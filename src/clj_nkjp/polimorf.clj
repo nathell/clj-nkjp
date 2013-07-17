@@ -10,7 +10,7 @@
   (defn analyze [word]
     (locking stemmer
       (let [res (map (fn [^WordData x] {:base (-> x .getStem str) :tag (-> x .getTag str)}) (.lookup stemmer word))]
-        (when-not (empty? res) res)))))
+        (when-not (empty? res) (doall res))))))
 
 (defn expand-single [tag]
   (map (partial string/join ":")
@@ -59,12 +59,23 @@
         (string/replace #"^verb:pred:pot" "pot")
         (string/replace #"^verb:" "")
         (string/replace #":(non)?refl" "")
-        (string/replace #"n[12]" "n")
+        (string/replace #":n[12]" ":n")
         (string/replace #"p[23]" "n")
         (string/replace #"p1" "m1")
         ((fn [t] (if (.startsWith t "siebie") (string/replace t #":n?akc" "") t))))))
 
+(defn analyze-t3 [x]
+  (cond
+   (re-find #"^[-.,:;?!\"()–]+$" x) '("interp")
+   (= (string/lower-case x) "się") '("qub")
+   :otherwise (let [an (concat (analyze x) (analyze (string/lower-case x)))]
+                (if (seq an)
+                  (map morfologik->t3 (mapcat (comp expand-tag :tag) an))
+                  (list "ign")))))
+
 ;;; NKJP to T3
+
+(def t3 (tagset/read-tagset (io/resource "tagsets/t3.tagset")))
 
 (defn parse-tag-from-segment [seg]
   (assoc
@@ -95,7 +106,7 @@
         :otherwise [curr (conj errors {:type :unsupported, :aux aux, :main main, :partial curr})]))
      [(assoc main :orth (apply str (:orth main) (map :orth aux))) errors]
      aux)
-    [main errors]))
+    [(if (#{"praet" "winien"} (:pos main)) (assoc main :person "ter") main) errors]))
 
 (defn nkjp->t3 [segs]
   (when (seq segs)
@@ -106,13 +117,27 @@
          (let [[aux nxt] (split-with #(and (:nps %) (not= (:pos %) "interp")) rst)]
            (cons (combine-subsegments fst aux []) (nkjp->t3 nxt))))))))
 
+(defn in-morfologik? [seg]
+  ((set (analyze-t3 (:orth seg))) (tagset/serialize-tag t3 seg)))
+
+(defn compactify-nim [x]
+  [(:orth x) (tagset/serialize-tag t3 x) (string/join " " (analyze-t3 (:orth x)))])
+
+(defn documents []
+  (map (comp read-string slurp) (rest (file-seq (io/file "/home/nathell/corpora/nkjp-clj/")))))
+
 (defn checker
   "Try running nkjp->t3 on all sentences in the corpus, to see
 how many unsupported cases we have."
   []
-  (->>
-   (for [f (rest (file-seq (io/file "/home/nathell/corpora/nkjp-clj/")))
-         :let [docum (read-string (slurp f))]
-         sent (sentences docum)]
-     (apply concat (map second (nkjp->t3 (sentence->segs sent)))))
-   (apply concat)))
+  (apply concat
+         (for [docum (documents) sent (sentences docum)]
+           (apply concat (map second (nkjp->t3 (sentence->segs sent)))))))
+
+(defn not-in-morfologik [document]
+  (mapcat #(remove in-morfologik? (map first (nkjp->t3 (sentence->segs %)))) (sentences document)))
+
+(defn nim-report []
+  (let [nim (mapcat not-in-morfologik (documents))]
+    (for [[k cnt] (sort-by val > (frequencies nim))]
+      (into [cnt] (compactify-nim k)))))
