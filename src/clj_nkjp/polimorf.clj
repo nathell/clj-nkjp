@@ -64,14 +64,32 @@
         (string/replace #"p1" "m1")
         ((fn [t] (if (.startsWith t "siebie") (string/replace t #":n?akc" "") t))))))
 
+(def morfologik-override
+  (into
+   {"się" '("qub")
+    "bardzo" '("adv:pos")
+    "najbardziej" '("adv:sup")
+    "znowu" '("adv" "qub")
+    "znów" '("adv" "qub")}
+   (for [base ["by" "żeby" "aby" "gdyby" "jakby" "że" "choćby" "chociażby"]
+         suffix ["m" "ś" "śmy" "ście"]]
+     [(str base suffix) '("comp" "qub")])))
+
+(def morfologik-additional
+  {"to" '("pred")
+   "także" '("conj")
+   "zbyt" '("qub")})
+
 (defn analyze-t3 [x]
-  (cond
-   (re-find #"^[-.,:;?!\"()–]+$" x) '("interp")
-   (= (string/lower-case x) "się") '("qub")
-   :otherwise (let [an (concat (analyze x) (analyze (string/lower-case x)))]
-                (if (seq an)
-                  (map morfologik->t3 (mapcat (comp expand-tag :tag) an))
-                  (list "ign")))))
+  (let [lc (string/lower-case x)]
+    (if (re-find #"^[\pP§+°=><˝`¨|×−$~]+$" x)
+      '("interp")
+      (if-let [override (morfologik-override lc)]
+        override
+        (let [an (concat (analyze x) (analyze lc))]
+          (if (seq an)
+            (distinct (concat (map morfologik->t3 (mapcat (comp expand-tag :tag) an)) (morfologik-additional lc)))
+            (list "ign")))))))
 
 ;;; NKJP to T3
 
