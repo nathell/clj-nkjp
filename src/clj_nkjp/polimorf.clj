@@ -23,6 +23,9 @@
 (defn expand-tag [tag]
   (mapcat expand-single (semiexpand-tag tag)))
 
+(defn expand-interp [{:keys [base tag]}]
+  (map (partial vector base) (expand-tag tag)))
+
 (defn extract-word-data [^WordData w]
   [[(str (.getWord w)) (str (.getStem w))] (semiexpand-tag (.getTag w))])
 
@@ -66,30 +69,31 @@
 
 (def morfologik-override
   (into
-   {"się" '("qub")
-    "bardzo" '("adv:pos")
-    "najbardziej" '("adv:sup")
-    "znowu" '("adv" "qub")
-    "znów" '("adv" "qub")}
+   {"się" [["się" "qub"]]
+    "bardzo" [["bardzo" "adv:pos"]]
+    "najbardziej" [["bardzo" "adv:sup"]]
+    "znowu" [["znowu" "adv"] ["znowu" "qub"]]
+    "znów" [["znów" "adv"] ["znów" "qub"]]}
    (for [base ["by" "żeby" "aby" "gdyby" "jakby" "że" "choćby" "chociażby"]
          suffix ["m" "ś" "śmy" "ście"]]
-     [(str base suffix) '("comp" "qub")])))
+     [(str base suffix) [[base "comp"] [base "qub"]]])))
 
 (def morfologik-additional
-  {"to" '("pred")
-   "także" '("conj")
-   "zbyt" '("qub")})
+  {"głównie" [["głównie" "qub"]]
+   "to" [["to" "pred"]]
+   "także" [["także" "conj"]]
+   "zbyt" [["zbyt" "qub"]]})
 
 (defn analyze-t3 [x]
   (let [lc (string/lower-case x)]
     (if (re-find #"^[\pP§+°=><˝`¨|×−$~]+$" x)
-      '("interp")
+      [[x "interp"]]
       (if-let [override (morfologik-override lc)]
         override
         (let [an (concat (analyze x) (analyze lc))]
           (if (seq an)
-            (distinct (concat (map morfologik->t3 (mapcat (comp expand-tag :tag) an)) (morfologik-additional lc)))
-            (list "ign")))))))
+            (distinct (concat (map (fn [[x y]] [x (morfologik->t3 y)]) (mapcat expand-interp an)) (morfologik-additional lc)))
+            [[x "ign"]]))))))
 
 ;;; NKJP to T3
 
@@ -136,7 +140,7 @@
            (cons (combine-subsegments fst aux []) (nkjp->t3 nxt))))))))
 
 (defn in-morfologik? [seg]
-  ((set (analyze-t3 (:orth seg))) (tagset/serialize-tag t3 seg)))
+  ((set (map second (analyze-t3 (:orth seg)))) (tagset/serialize-tag t3 seg)))
 
 (defn compactify-nim [x]
   [(:orth x) (tagset/serialize-tag t3 x) (string/join " " (analyze-t3 (:orth x)))])
