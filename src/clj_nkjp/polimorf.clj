@@ -119,7 +119,7 @@
     (assoc seg :person "ter")
     seg))
 
-(defn combine-subsegments [main aux errors]
+(defn combine-subsegments-no-verify [main aux errors]
   (if (seq aux)
     (reduce
      (fn [[curr errors] aux]
@@ -134,6 +134,15 @@
      [(-> main (assoc :orth (apply str (:orth main) (map :orth aux))) add-default-person) errors]
      aux)
     [(add-default-person main) errors]))
+
+(defn combine-subsegments [main aux errors]
+  (let [[res errors] (combine-subsegments-no-verify main aux errors)]
+    (try
+      (tagset/verify-tag t3 res)
+      [res errors]
+      (catch Exception e
+        [{:orth (:orth res), :base (:base res), :nps (:nps res), :pos "ign"}
+         (conj errors {:type :not-in-t3, :error (.getMessage e)})]))))
 
 (defn nkjp->t3 [segs]
   (when (seq segs)

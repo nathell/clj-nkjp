@@ -61,7 +61,9 @@
   (let [categories (pos (:pos tag))
         allowed-categories (set (map keyword (flatten categories)))
         keyset (set (keys tag))]
-    (doseq [[k v] tag :when (and (not= k :pos) (not= k :base))]
+    (when-not categories
+      (throw (Exception. (format "Unknown class: %s" (:pos tag)))))
+    (doseq [[k v] tag :when (not (#{:pos :base :orth :nps} k))]
       (when-not (allowed-categories k)
         (throw (Exception. (format "%s doesn't inflect with %s: %s" (:pos tag) k tag)))))
     (doseq [cat categories :when (not (vector? cat))]
