@@ -114,6 +114,11 @@
 (defn sentences [document]
   (filter #(= (first %) :s) (tree-seq vector? rest document)))
 
+(defn add-default-person [seg]
+  (if (#{"praet" "winien"} (:pos seg))
+    (assoc seg :person "ter")
+    seg))
+
 (defn combine-subsegments [main aux errors]
   (if (seq aux)
     (reduce
@@ -126,9 +131,9 @@
                                [(assoc curr :pos "pot") errors]
                                [curr (conj errors {:type :pot, :aux aux, :main main, :partial curr})])
         :otherwise [curr (conj errors {:type :unsupported, :aux aux, :main main, :partial curr})]))
-     [(assoc main :orth (apply str (:orth main) (map :orth aux))) errors]
+     [(-> main (assoc :orth (apply str (:orth main) (map :orth aux))) add-default-person) errors]
      aux)
-    [(if (#{"praet" "winien"} (:pos main)) (assoc main :person "ter") main) errors]))
+    [(add-default-person main) errors]))
 
 (defn nkjp->t3 [segs]
   (when (seq segs)
