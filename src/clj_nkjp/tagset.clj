@@ -71,13 +71,19 @@
         (throw (Exception. (format "%s needs to inflect with %s: %s" (:pos tag) cat tag)))))
     tag))
 
+(defn parse-ctag 
+  ([tagset ctag] 
+     (let [[the-pos & tag-parts] (string/split ctag #":")]
+       (parse-ctag tagset the-pos tag-parts)))
+  ([tagset the-pos tag-parts]
+     (into {:pos the-pos}
+           (for [part tag-parts :let [part-name (tagset part)]]
+             (if part-name
+               [(keyword part-name) part]
+               (throw (Exception. (format "Unknown tag part: %s" part))))))))
+
 (defn parse-tag
   ([tag] (parse-tag nkjp tag))
   ([tagset tag]
      (let [[orth [the-pos & tag-parts]] (split-when (:pos tagset) (string/split tag #":"))]
-       (verify-tag tagset
-                   (into {:pos the-pos, :base (string/join ":" orth)}
-                         (for [part tag-parts :let [part-name (tagset part)]]
-                           (if part-name
-                             [(keyword part-name) part]
-                             (throw (Exception. (format "Unknown tag part: %s" part))))))))))
+       (verify-tag tagset (assoc (parse-ctag tagset the-pos tag-parts) :base (string/join ":" orth))))))
