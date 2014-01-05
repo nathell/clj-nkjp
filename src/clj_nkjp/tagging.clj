@@ -70,19 +70,24 @@
   (when s
     (.endsWith s suffix)))
 
-(defn parse-unigram [lines]
+(defn parse-unigram [lines parse-tag-fn]
   (into {}
-        (for [[word & interps] (split-when #(not (starts-with % "\t")) lines)]
+        (for [[word & interps] (split-when #(not (starts-with % "\t")) (rest lines))]
           [word
            (sort-by second >
                     (for [[k v] (map #(string/split (string/trim %) #" -> ") interps)]
-                      [k (as-int v)]))])))
+                      [(parse-tag-fn k) (as-int v)]))])))
+
+(defn parse-rules [lines]
+  (doall (map #(postprocess-parse-tree (parser %)) (rest lines))))
 
 (defn load-tagging-data []
   (with-open [f (io/reader (io/resource "tagging.dat"))]
     (let [[unigram1 unigram2 rules1 rules2] (split-when #(starts-with % "===") (line-seq f))]
-      {:unigram (parse-unigram (rest unigram1)),
-       :rules (doall (map #(postprocess-parse-tree (parser %)) (rest rules1)))})))
+      {:unigram1 (parse-unigram unigram1 #(project-to-simplified-tagset (tagset/parse-ctag polimorf/t3 %))),
+       :rules1 (parse-rules rules1),
+       :unigram2 (parse-unigram unigram2 (partial tagset/parse-ctag polimorf/t3)),
+       :rules2 (parse-rules rules2)})))
 
 (defn tokenize [s]
   (filter seq (string/split s #"\pZ+|(?=\pP)(?<!\pP)|(?<=\pP)(?!\pP)")))
@@ -136,15 +141,15 @@
   (cond
    (= lval '(:tag 0))
    (let [new-tag (tagset/parse-ctag polimorf/t3 rval)]
-     `(if ((:considered ~'current-seg) new-tag)
-        (into ~new-tag {:orth (:orth ~'current-seg) :considered (:considered ~'current-seg)})
+     `(if ((:considered ~'current-seg) ~new-tag)
+        (into ~new-tag (select-keys ~'current-seg [:orth :considered :considered2]))
         ~'current-seg))
    (and (= (first lval) :project) (= (second lval) '(:tag 0)))
    (let [changed-category (keyword (nth lval 2))]
      `(let [new-tag# (assoc ~'current-seg ~changed-category ~rval)
             new-tag# (find-nearest-tag (dissoc new-tag# :considered :orth) (:considered ~'current-seg) ~changed-category)]
         (if new-tag#
-          (assoc new-tag# :orth (:orth ~'current-seg) :considered (:considered ~'current-seg))
+          (into new-tag# (select-keys ~'current-seg [:orth :considered :considered2]))
           ~'current-seg)))
    :otherwise nil))
 
@@ -176,23 +181,36 @@
 (defn tag-word-simplified [word unigram]
   (let [polimorf-tags (map second (polimorf/analyze-t3 word))
         tags (unigram word)
-        simplify-tag (fn [tag] (project-to-simplified-tagset (tagset/parse-ctag polimorf/t3 tag)))]
+        simplify-tag (fn [tag] (project-to-simplified-tagset (tagset/parse-ctag polimorf/t3 tag)))
+        considered-full (map (partial tagset/parse-ctag polimorf/t3) polimorf-tags)]
     (assoc
         (if tags
-          (tagset/parse-ctag polimorf/t3 (first (first tags)))
+          (first (first tags))
           (simplify-tag (first polimorf-tags)))
-      :considered (set (map simplify-tag polimorf-tags))
+      :considered (set (map project-to-simplified-tagset considered-full))
+      :considered2 (set considered-full)
       :orth word)))
 
 (defn tag-phase-0 [text]
-  (map #(tag-word-simplified % (td :unigram)) (tokenize text)))
+  (map #(tag-word-simplified % (td :unigram1)) (tokenize text)))
 
 (defn process-rule [text rule]
   (vec (map (partial rule text) (range (count text)))))
 
-(let [rules (map compile-rule (:rules td))]
-  (defn tag-phase-1 [text]
-    (reduce process-rule (vec (tag-phase-0 text)) rules)))
+(defn select-starting-tag-for-phase-2 [segment]
+  (let [tags (map first ((:unigram2 td) (segment :orth)))
+        initial-tag (or (first (filter (fn [tag] (= (project-to-simplified-tagset tag) (dissoc segment :orth :considered :considered2))) tags))
+                        (first tags)
+                        (first (:considered2 segment)))]
+    (assoc initial-tag :orth (:orth segment) :considered (:considered2 segment))))
+
+(let [rules1 (map compile-rule (:rules1 td))
+      rules2 (map compile-rule (:rules2 td))]
+  (defn tag [text]
+    (let [phase-0 (tag-phase-0 text)
+          phase-1 (reduce process-rule (vec (tag-phase-0 text)) rules1)
+          phase-2-initial (map select-starting-tag-for-phase-2 phase-1)]
+      (reduce process-rule (vec phase-2-initial) rules2))))
 
 (defn try-rules [text position]
   (let [len (dec (count text))]
@@ -202,3 +220,5 @@
                      ~(compile-condition rule))]
         [rule (eval to-ev)]))))
   
+(defn tag-test [text]
+  (string/join " " (map #(str (:orth %) " [" (tagset/serialize-tag polimorf/t3 %) "]") (tag text))))
