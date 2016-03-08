@@ -27,11 +27,16 @@
   (let [files (filter #(.endsWith (str %) ".clj") (file-seq (io/file input-dir)))]
     (merge-freqs (map file-freqs files))))
 
+(defn disamb-single
+  [v]
+  (when-let [kv (first (sort-by val > (remove (comp empty? key) v)))]
+    (key kv)))
+
 (defn disamb-map
   [m]
   (into {}
-        (for [[k v] m]
-          [k (key (first (sort-by val > v)))])))
+        (for [[k v] m :let [v' (disamb-single v)] :when v']
+          [k v'])))
 
 (defn generate
   [out]
